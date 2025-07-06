@@ -41,7 +41,40 @@ The result of Task 1 is `data/filtered_complaints.csv`, a cleaned and filtered d
 
 ## 3. Task 2: Text Chunking, Embedding, and Vector Store Indexing
 
-*(To be filled after completing Task 2)*
+### Objective
+The objective of Task 2 was to transform the cleaned text narratives from Task 1 into a format suitable for efficient semantic search. This involved implementing a text chunking strategy, selecting and applying an appropriate embedding model, and creating a persistent vector store to index these embeddings along with relevant metadata.
+
+### Methodology
+
+1.  **Text Chunking Strategy:**
+    * The `Cleaned_Narrative` column from the `filtered_complaints.csv` dataset was used as input.
+    * `LangChain's RecursiveCharacterTextSplitter` was employed for chunking.
+    * Initial parameters chosen were `chunk_size=[YOUR_CHUNK_SIZE_HERE]` and `chunk_overlap=[YOUR_CHUNK_OVERLAP_HERE]`.
+    * Each chunk was associated with metadata, including the `Complaint ID`, `Product`, and `Issue` from the original complaint.
+    * The generated chunks were saved to `data/complaint_chunks.csv`.
+2.  **Embedding Model Choice:**
+    * The `sentence-transformers/all-MiniLM-L6-v2` model was selected for generating vector embeddings.
+    * *(Justification Placeholder: Briefly explain why this model was chosen, e.g., its balance of performance and efficiency for semantic similarity tasks.)*
+3.  **Vector Store Integration (FAISS):**
+    * Embeddings were generated for all text chunks.
+    * A FAISS (Facebook AI Similarity Search) index was created using these embeddings.
+    * The FAISS index was persisted to `vectorstore/faiss_index.bin`.
+    * The corresponding metadata for each chunk (linking the vector to its original text and complaint details) was saved separately to `vectorstore/metadata.csv`.
+
+### Key Findings and Justification
+
+* **Chunking Strategy:**
+    * *(Placeholder: Discuss your chosen `chunk_size` and `chunk_overlap`. Justify why these values were effective for the nature of customer complaint narratives. For example, did they help preserve context while keeping chunks manageable for embedding?)*
+    * *(Placeholder: Mention the total number of chunks created.)*
+* **Embedding Model:**
+    * *(Placeholder: Reiterate the choice of `all-MiniLM-L6-v2` and provide a brief justification for its suitability for this project, e.g., good performance on semantic similarity tasks, efficiency for deployment.)*
+
+### Output
+
+Upon successful execution, the following outputs were generated:
+* `data/complaint_chunks.csv`: A CSV file containing all the generated text chunks along with their associated `complaint_id`, `product`, and `issue`.
+* `vectorstore/faiss_index.bin`: The binary file containing the persisted FAISS index.
+* `vectorstore/metadata.csv`: A CSV file containing the metadata (`complaint_id`, `product`, `issue`, `chunk` text) corresponding to the vectors in the FAISS index, enabling retrieval of original context.
 
 ## 4. Task 3: Building the RAG Core Logic and Evaluation
 
