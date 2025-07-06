@@ -73,6 +73,11 @@ The `data/filtered_complaints.csv` file contains the preprocessed and filtered s
 * **Description:** Performed initial EDA on the CFPB complaint dataset, analyzed complaint distributions, narrative lengths, and identified records with/without narratives. The dataset has been filtered to include only records for "Credit card", "Personal loan", "Buy Now, Pay Later (BNPL)", "Savings account", and "Money transfers" products, and records with empty `Consumer complaint narrative` fields have been removed. Text narratives have been cleaned (lowercasing, special character removal).
 * **Output:** The cleaned and filtered dataset is saved at `data/filtered_complaints.csv`. A detailed analysis is provided in `docs/report.md` and the `notebooks/EDA_and_Preprocessing.ipynb` notebook.
 
+**Task 2: Text Chunking, Embedding, and Vector Store Indexing**
+* **Status:** Completed.
+* **Description:** Implemented logic for text chunking using `LangChain's RecursiveCharacterTextSplitter`. Chosen `sentence-transformers/all-MiniLM-L6-v2` for generating embeddings. Integrated FAISS for efficient vector storage and retrieval, ensuring metadata (Complaint ID, Product, Issue) is stored alongside embeddings for source attribution.
+* **Output:** Expected outputs include `data/complaint_chunks.csv`, `vectorstore/faiss_index.bin`, and `vectorstore/metadata.csv`. Detailed findings and justifications will be added to `docs/report.md` after execution.
+
 ## How to Run
 
 *(This section will be populated as we implement the RAG pipeline and the Gradio app.)*
