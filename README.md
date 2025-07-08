@@ -80,6 +80,66 @@ The `data/filtered_complaints.csv` file contains the preprocessed and filtered s
 
 ## How to Run
 
-*(This section will be populated as we implement the RAG pipeline and the Gradio app.)*
+### 1. Launch the Chat Interface
+```bash
+python app/app.py
+```
+Access at: `http://localhost:7860`
 
----
+### 2. Command Line Query
+```bash
+python src/rag_pipeline.py --query "What are common BNPL issues?"
+```
+
+### System Requirements
+| Component | Minimum Specs |
+|-----------|---------------|
+| CPU | 4 cores (Intel i5+) |
+| RAM | 8GB |
+| Disk Space | 5GB (including models) |
+
+## Key Features
+
+✅ **Complaint Analysis**
+- Semantic search across 400K+ complaints
+- Product-specific filtering (5 categories)
+
+✅ **User Experience**
+- Streaming responses
+- Source attribution
+- Feedback collection
+
+✅ **Deployment Ready**
+- CPU-optimized
+- Container support (Dfile included)
+- Modular architecture
+
+## Example Usage
+
+1. **Ask about product issues:**
+   ```
+   "Show recent complaints about credit card late fees"
+   ```
+
+2. **Compare products:**
+   ```
+   "What issues are unique to BNPL vs personal loans?"
+   ```
+
+3. **Investigate trends:**
+   ```
+   "Are mobile app complaints increasing?"
+   ```
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Slow responses | Reduce chunk size in `src/retriever.py` |
+| OOM errors | Decrease batch size in `src/generator.py` |
+| Model not found | Download GGUF model to `models/` |
+
+
+
+## License
+Apache 2.0 - See [LICENSE](LICENSE)
