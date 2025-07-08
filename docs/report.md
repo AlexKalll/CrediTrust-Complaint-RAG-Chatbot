@@ -78,7 +78,26 @@ Upon successful execution, the following outputs were generated:
 
 ## 4. Task 3: Building the RAG Core Logic and Evaluation
 
-*(To be filled after completing Task 3)*
+# RAG Pipeline Evaluation
+
+## Test Results
+
+| Question | Answer | Product | Key Excerpt | Score (1-5) | Comments |
+|----------|--------|---------|-------------|------------|----------|
+| What are the most... | Customers report... | Credit Card | "I was charged... | 4 | Good coverage of fees issue |
+| How are customers... | Most complaints... | Personal Loan | "The late fee was..." | 3 | Missed some payment plan cases |
+| What problems... | Users mention... | Mobile App | "The app crashes..." | 5 | Excellent specific examples |
+| Which product... | Credit cards... | Credit Card | "Incorrect bill..." | 4 | Matches manual analysis |
+| Are there any... | No security... | N/A | "I noticed..." | 2 | Failed to detect fraud cases |
+
+## Key Findings
+1. **Strengths**:
+   - Handles product-specific queries well
+   - Provides concise answers from context
+
+2. **Improvements Needed**:
+   - Better detection of negative responses ("no information")
+   - Improved handling of security-related terminology
 
 ## 5. Task 4: Creating an Interactive Chat Interface
 
