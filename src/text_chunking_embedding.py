@@ -1,195 +1,239 @@
-# src/text_chunking_embedding.py
-
+import os
+import logging
+from pathlib import Path
+from typing import Tuple, Optional
 import pandas as pd
 import numpy as np
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, util
 import faiss
-import os
+
+# --- Configure logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # --- Configuration Paths ---
-# Path to the cleaned and filtered dataset from Task 1
-INPUT_DATA_PATH = '../data/filtered_complaints.csv'
-# Path to save the generated text chunks (with metadata)
-CHUNKS_OUTPUT_PATH = '../data/complaint_chunks.csv'
-# Path to save the FAISS index file
-FAISS_INDEX_PATH = '../vectorstore/faiss_index.bin'
-# Path to save the metadata associated with each chunk (for retrieval)
-METADATA_OUTPUT_PATH = '../vectorstore/metadata.csv'
+BASE_DIR = Path(__file__).parent.parent
+INPUT_DATA_PATH = BASE_DIR / 'data/filtered_complaints.csv'
+CHUNKS_OUTPUT_PATH = BASE_DIR / 'data/complaint_chunks.parquet'
+FAISS_INDEX_PATH = BASE_DIR / 'vectorstore/faiss_index.bin'
+METADATA_OUTPUT_PATH = BASE_DIR / 'vectorstore/metadata.parquet'
 
 # --- Model and Chunking Parameters ---
-# Embedding model to use for generating vector representations of text
 EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
-# Size of each text chunk (in characters or words, depending on length_function)
 CHUNK_SIZE = 500
-# Overlap between consecutive chunks to maintain context
 CHUNK_OVERLAP = 50
+EMBEDDING_BATCH_SIZE = 32
+FAISS_NLIST = 100  # Number of clusters for IVF index
 
-def load_data(file_path: str) -> pd.DataFrame:
-    """
-    Loads the preprocessed complaints data from a CSV file.
-
-    Args:
-        file_path (str): The path to the CSV file.
-
-    Returns:
-        pd.DataFrame: The loaded DataFrame. Returns an empty DataFrame if file not found.
-    """
-    if not os.path.exists(file_path):
-        print(f"Error: Input data file not found at {file_path}. Please ensure Task 1 is complete.")
-        return pd.DataFrame()
-    print(f"Loading filtered complaints data from {file_path}...")
-    df = pd.read_csv(file_path)
-    print(f"Data loaded successfully. Shape: {df.shape}")
-    return df
+def load_data(file_path: Path) -> pd.DataFrame:
+    if not file_path.exists():
+        raise FileNotFoundError(f"Input data file not found at {file_path}")
+    
+    logger.info(f"Loading data from {file_path}...")
+    try:
+        df = pd.read_csv(file_path)
+        if df.empty:
+            raise ValueError("Loaded DataFrame is empty")
+        logger.info(f"Data loaded successfully. Shape: {df.shape}")
+        return df
+    except Exception as e:
+        raise ValueError(f"Error loading data: {str(e)}")
 
 def chunk_narratives(df: pd.DataFrame, text_column: str = 'Cleaned_Narrative') -> pd.DataFrame:
     """
-    Chunks the text narratives from the DataFrame into smaller, overlapping segments.
-    Each chunk is associated with its original complaint ID and product.
-
-    Args:
-        df (pd.DataFrame): The DataFrame containing the cleaned narratives.
-        text_column (str): The name of the column containing the text to chunk.
-
-    Returns:
-        pd.DataFrame: A DataFrame where each row represents a chunk,
-                      including 'complaint_id', 'product', and 'chunk' text.
-    """
-    if text_column not in df.columns:
-        print(f"Error: Column '{text_column}' not found in the DataFrame. "
-              "Please ensure your data preprocessing created this column.")
-        return pd.DataFrame()
-
-    print(f"Chunking narratives from '{text_column}' column (chunk_size={CHUNK_SIZE}, chunk_overlap={CHUNK_OVERLAP})...")
+    Chunks text narratives into smaller segments with metadata.
     
-    # Initialize LangChain's RecursiveCharacterTextSplitter
-    # It splits text by characters by default, which is usually robust.
+    Args:
+        df: DataFrame containing narratives
+        text_column: Name of column containing text to chunk
+        
+    Returns:
+        DataFrame with chunks and metadata
+        
+    Raises:
+        ValueError: If required columns are missing
+    """
+    required_columns = {text_column, 'Complaint ID', 'Product'}
+    if not required_columns.issubset(df.columns):
+        missing = required_columns - set(df.columns)
+        raise ValueError(f"Missing required columns: {missing}")
+    
+    logger.info(f"Chunking narratives (size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})...")
+    
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
-        length_function=len, # Use character length
-        add_start_index=True, # Optional: adds character offset metadata
+        length_function=len,
+        add_start_index=True,
     )
 
     all_chunks = []
-    # Iterate through each row of the DataFrame to process narratives
-    for index, row in df.iterrows():
-        narrative = str(row[text_column]) # Ensure narrative is a string
-        
-        # Skip if the narrative is empty or just whitespace after cleaning
-        if pd.isna(narrative) or not narrative.strip():
+    for _, row in df.iterrows():
+        narrative = str(row[text_column]).strip()
+        if not narrative:
             continue
 
-        # Split the current narrative into smaller chunks
-        # create_documents returns a list of Document objects.
-        # We pass metadata for the whole document, which gets copied to each chunk.
-        chunks_for_narrative = text_splitter.create_documents(
+        chunks = text_splitter.create_documents(
             texts=[narrative],
             metadatas=[{
                 'complaint_id': row['Complaint ID'],
                 'product': row['Product'],
-                'issue': row.get('Issue', 'N/A') # Include 'Issue' if available, or 'N/A'
+                'issue': row.get('Issue', 'N/A'),
+                'original_length': len(narrative)
             }]
         )
         
-        # Extract the chunk text and its associated metadata
-        for chunk_doc in chunks_for_narrative:
+        for chunk in chunks:
             all_chunks.append({
-                'complaint_id': chunk_doc.metadata['complaint_id'],
-                'product': chunk_doc.metadata['product'],
-                'issue': chunk_doc.metadata['issue'], # Add issue to metadata
-                'chunk': chunk_doc.page_content # The actual text content of the chunk
+                **chunk.metadata,
+                'chunk_text': chunk.page_content,
+                'chunk_length': len(chunk.page_content)
             })
     
     df_chunks = pd.DataFrame(all_chunks)
-    print(f"Finished chunking. Total {len(df_chunks)} chunks created.")
+    logger.info(f"Created {len(df_chunks)} chunks from {len(df)} narratives")
     return df_chunks
 
-def generate_embeddings(df_chunks: pd.DataFrame) -> np.ndarray:
+def load_embedding_model() -> SentenceTransformer:
     """
-    Generates embeddings for each text chunk using a Sentence Transformer model.
-
-    Args:
-        df_chunks (pd.DataFrame): DataFrame containing the 'chunk' column.
-
-    Returns:
-        np.ndarray: A NumPy array of embeddings.
-    """
-    if 'chunk' not in df_chunks.columns:
-        print("Error: 'chunk' column not found in the chunks DataFrame.")
-        return np.array([])
-
-    print(f"Initializing SentenceTransformer model: {EMBEDDING_MODEL_NAME}...")
-    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    Loads the SentenceTransformer model with error handling.
     
-    print("Generating embeddings for chunks (this may take a while)...")
-    # Encode all chunks into embeddings. batch_size can be adjusted based on memory.
-    embeddings = model.encode(df_chunks['chunk'].tolist(), batch_size=32, show_progress_bar=True)
-    print("Embeddings generated.")
-    return embeddings
-
-def create_and_save_faiss_index(embeddings: np.ndarray, index_file_path: str):
+    Returns:
+        Initialized SentenceTransformer model
+        
+    Raises:
+        RuntimeError: If model fails to load
     """
-    Creates a FAISS index from the embeddings and saves it to a file.
+    try:
+        logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
+        return SentenceTransformer(EMBEDDING_MODEL_NAME)
+    except Exception as e:
+        logger.error(f"Failed to load model: {e}")
+        raise RuntimeError(f"Could not load embedding model: {str(e)}")
 
+def generate_embeddings(df_chunks: pd.DataFrame, model: SentenceTransformer) -> np.ndarray:
+    """
+    Generates embeddings for text chunks in batches.
+    
     Args:
-        embeddings (np.ndarray): The NumPy array of embeddings.
-        index_file_path (str): The path where the FAISS index will be saved.
+        df_chunks: DataFrame containing chunks
+        model: Initialized SentenceTransformer
+        
+    Returns:
+        Numpy array of embeddings
+    """
+    if 'chunk_text' not in df_chunks.columns:
+        raise ValueError("DataFrame missing 'chunk_text' column")
+    
+    logger.info("Generating embeddings (this may take a while)...")
+    texts = df_chunks['chunk_text'].tolist()
+    
+    try:
+        embeddings = model.encode(
+            texts,
+            batch_size=EMBEDDING_BATCH_SIZE,
+            show_progress_bar=True,
+            convert_to_numpy=True
+        )
+        logger.info(f"Generated {len(embeddings)} embeddings")
+        return embeddings
+    except Exception as e:
+        logger.error(f"Embedding generation failed: {e}")
+        raise RuntimeError(f"Embedding generation failed: {str(e)}")
+
+def create_faiss_index(embeddings: np.ndarray) -> faiss.Index:
+    """
+    Creates optimized FAISS index for embeddings.
+    
+    Args:
+        embeddings: Array of embeddings to index
+        
+    Returns:
+        Constructed FAISS index
     """
     if embeddings.size == 0:
-        print("No embeddings to index. Skipping FAISS index creation.")
-        return
+        raise ValueError("No embeddings provided for indexing")
+    
+    dimension = embeddings.shape[1]
+    logger.info(f"Building FAISS index (dim={dimension}, nlist={FAISS_NLIST})...")
+    
+    # Create quantizer and IVF index for better performance
+    quantizer = faiss.IndexFlatL2(dimension)
+    index = faiss.IndexIVFFlat(quantizer, dimension, FAISS_NLIST)
+    
+    # Train on a subset if dataset is large
+    if len(embeddings) > 10_000:
+        train_sample = embeddings[:10_000]
+    else:
+        train_sample = embeddings
+        
+    index.train(train_sample)
+    index.add(embeddings)
+    
+    logger.info(f"Index contains {index.ntotal} vectors")
+    return index
 
-    dimension = embeddings.shape[1] # Dimension of the embeddings (e.g., 384 for MiniLM)
-    print(f"Building FAISS index (dimension: {dimension})...")
+def save_outputs(df_chunks: pd.DataFrame, index: faiss.Index) -> None:
+    """
+    Saves all outputs to disk.
     
-    # Use IndexFlatL2 for a simple L2 distance (Euclidean distance) based index
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings) # Add the embeddings to the index
+    Args:
+        df_chunks: Chunks DataFrame
+        index: FAISS index
+    """
+    # Ensure directories exist
+    for path in [CHUNKS_OUTPUT_PATH, FAISS_INDEX_PATH, METADATA_OUTPUT_PATH]:
+        path.parent.mkdir(parents=True, exist_ok=True)
     
-    faiss.write_index(index, index_file_path)
-    print(f"Saved FAISS index with {index.ntotal} vectors to {index_file_path}")
+    # Save chunks
+    df_chunks.to_parquet(CHUNKS_OUTPUT_PATH)
+    logger.info(f"Saved chunks to {CHUNKS_OUTPUT_PATH}")
+    
+    # Save FAISS index
+    faiss.write_index(index, str(FAISS_INDEX_PATH))
+    logger.info(f"Saved FAISS index to {FAISS_INDEX_PATH}")
+    
+    # Save metadata (without embeddings)
+    metadata_cols = ['complaint_id', 'product', 'issue', 'chunk_text']
+    df_chunks[metadata_cols].to_parquet(METADATA_OUTPUT_PATH)
+    logger.info(f"Saved metadata to {METADATA_OUTPUT_PATH}")
 
 def main():
-    """
-    Main function to orchestrate data loading, chunking, embedding,
-    and FAISS index creation and persistence.
-    """
-    # Ensure output directories exist
-    os.makedirs(os.path.dirname(CHUNKS_OUTPUT_PATH), exist_ok=True)
-    os.makedirs(os.path.dirname(FAISS_INDEX_PATH), exist_ok=True)
-    os.makedirs(os.path.dirname(METADATA_OUTPUT_PATH), exist_ok=True)
+    """Orchestrates the chunking, embedding and indexing pipeline."""
+    try:
+        # 1. Load data
+        df = load_data(INPUT_DATA_PATH)
 
-    # 1. Load the filtered data
-    df = load_data(INPUT_DATA_PATH)
-    if df.empty:
-        return
-
-    # 2. Chunk the narratives
-    df_chunks = chunk_narratives(df, text_column='Cleaned_Narrative')
-    if df_chunks.empty:
-        print("No chunks were generated. Exiting.")
-        return
-    
-    # Save the chunks DataFrame to CSV (as requested)
-    df_chunks[['complaint_id', 'product', 'issue', 'chunk']].to_csv(CHUNKS_OUTPUT_PATH, index=False)
-    print(f"Saved {len(df_chunks)} chunks to {CHUNKS_OUTPUT_PATH}")
-
-    # 3. Generate embeddings for the chunks
-    embeddings = generate_embeddings(df_chunks)
-    if embeddings.size == 0:
-        print("No embeddings generated. Exiting.")
-        return
-
-    # 4. Create and save FAISS index
-    create_and_save_faiss_index(embeddings, FAISS_INDEX_PATH)
-    
-    # 5. Save metadata separately (excluding the 'embedding' column if it were added to df_chunks)
-    # We'll save the core metadata that links back to the original chunks
-    df_chunks[['complaint_id', 'product', 'issue', 'chunk']].to_csv(METADATA_OUTPUT_PATH, index=False)
-    print(f"Saved metadata to {METADATA_OUTPUT_PATH}")
-    print("Task 2: Text Chunking, Embedding, and Vector Store Indexing completed successfully!")
+        #  Taking 10% from each product type for sake of time while embedding
+        df = (
+            df.groupby('Product', group_keys=False)  # Avoid adding group key to index
+            .apply(lambda x: x.sample(frac=0.1, random_state=42))  # Fixed seed for reproducibility
+            .reset_index(drop=True)  # Clean index
+            )
+        
+        # 2. Chunk narratives
+        df_chunks = chunk_narratives(df)
+        if df_chunks.empty:
+            raise ValueError("No chunks generated - check input data")
+        
+        # 3. Generate embeddings
+        model = load_embedding_model()
+        embeddings = generate_embeddings(df_chunks, model)
+        
+        # 4. Create and save FAISS index
+        index = create_faiss_index(embeddings)
+        
+        # 5. Save all outputs
+        save_outputs(df_chunks, index)
+        
+        logger.info("Text chunking and embedding completed successfully!")
+    except Exception as e:
+        logger.error(f"Pipeline failed: {e}")
+        raise
 
 if __name__ == "__main__":
     main()
