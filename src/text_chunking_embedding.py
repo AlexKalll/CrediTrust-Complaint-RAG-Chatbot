@@ -207,6 +207,13 @@ def main():
     try:
         # 1. Load data
         df = load_data(INPUT_DATA_PATH)
+
+        #  Taking 10% from each product type for sake of time while embedding
+        df = (
+            df.groupby('Product', group_keys=False)  # Avoid adding group key to index
+            .apply(lambda x: x.sample(frac=0.1, random_state=42))  # Fixed seed for reproducibility
+            .reset_index(drop=True)  # Clean index
+            )
         
         # 2. Chunk narratives
         df_chunks = chunk_narratives(df)
