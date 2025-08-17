@@ -1,0 +1,74 @@
+# .github/workflows/ci.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop # Assuming you might have a develop branch for features
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest # Using Ubuntu for the CI runner
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2 # Action to checkout your code
+
+    - name: Set up Python # Specifies Python version
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9' # Or '3.10', '3.11' depending on your preference/testing
+
+    - name: Install dependencies # Installs all packages from requirements.txt
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        # Install accelerate as it's a common dependency for transformers
+        pip install accelerate # Added accelerate
+        # Install llama-cpp-python if your LLM strategy uses GGUF
+        pip install llama-cpp-python # Added llama-cpp-python
+
+    - name: Download NLTK data
+      run: |
+        python -c "import nltk; nltk.download('punkt'); nltk.download('wordnet'); nltk.download('stopwords')"
+
+    - name: Run Code Formatter (Black) # Check code formatting
+      run: |
+        pip install black
+        black --check .
+
+    - name: Run Linting (Flake8) # Check code style
+      run: |
+        pip install flake8 # Install flake8
+        flake8 src/ tests/ dashboards/ --max-line-length=120 --ignore=E203,W503 # Adjust paths as needed and ignore Black-related issues
+
+    - name: Run Tests (Pytest) # Execute your unit and integration tests
+      run: |
+        python -m pytest tests/
+
+    # Placeholder for build and packaging steps, if you were deploying a package
+    - name: Build and package (if applicable)
+      run: |
+        echo "Building and packaging artifacts (e.g., Docker image or Python package)..."
+        # Example: docker build -t my-rag-app .
+
+  # Deployment job (only runs on successful build-and-test and main branch pushes)
+  deploy:
+    needs: build-and-test # This job depends on build-and-test finishing successfully
+    if: github.ref == 'refs/heads/main' # Only deploy from the main branch
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Deploy to production # Placeholder for actual deployment commands
+      run: |
+        echo "Deploying to production environment..."
+        # Example: kubectl apply -f kubernetes_deployment.yaml
+        # Example: aws s3 sync dist/ s3://my-app-bucket/
