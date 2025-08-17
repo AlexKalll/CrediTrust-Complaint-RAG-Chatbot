@@ -11,3 +11,4 @@ gradio
 huggingface-hub
 python-dotenv
 dask
+pyarrow

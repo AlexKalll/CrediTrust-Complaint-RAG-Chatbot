@@ -2,11 +2,15 @@ import gradio as gr
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from src.rag import RAGPipeline
 from transformers import TextIteratorStreamer
 from threading import Thread
 import csv
 import os
+
+import sys
+root_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(root_dir))
+from src.rag_pipeline import RAGPipeline
 
 # Initialize RAG pipeline
 rag = RAGPipeline(
@@ -35,55 +39,56 @@ def save_conversation():
 
 def respond(question: str, product_filter: str, history: list) -> tuple:
     """Handle user question with streaming"""
-    # Apply product filter
-    filter_metadata = metadata
-    if product_filter != "All Products":
-        filter_metadata = metadata[metadata['product'] == product_filter]
-    
-    # Get retrieved chunks
-    query_embed = rag.retriever.embed_query(question)
-    chunks, sources = rag.retriever.retrieve_chunks(query_embed)
-    
-    # Prepare streaming
-    prompt = rag.generator._build_prompt(question, chunks)
-    streamer = TextIteratorStreamer(rag.generator.pipe.tokenizer)
-    
-    # Start generation
-    generation_kwargs = dict(
-        prompt,
-        streamer=streamer,
-        max_new_tokens=200,
-        temperature=0.3
-    )
-    thread = Thread(target=rag.generator.pipe, kwargs=generation_kwargs)
-    thread.start()
-    
-    # Stream response
-    full_response = ""
-    for new_text in streamer:
-        full_response += new_text
-        if "Answer:" in full_response:
-            answer_part = full_response.split("Answer:")[1].strip()
-            yield answer_part, format_sources(sources), gr.update(interactive=True), gr.update(interactive=True)
-    
-    thread.join()
-    
-    # Log conversation
-    conversation_history.append({
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "question": question,
-        "answer": full_response.split("Answer:")[1].strip(),
-        "product_filter": product_filter,
-        "feedback": None
-    })
+    try:
+        # Query RAG pipeline
+        result = rag.query(question, product_filter)
+        streamer = result['response_streamer']
+        sources = result['sources']
+        thread = result['generation_thread']
+        thread.start()
+        
+        # Stream response
+        full_response = ""
+        for new_text in streamer:
+            full_response += new_text
+            # Yield the answer part if "Answer:" is present, otherwise yield the full response
+            if "Answer:" in full_response:
+                answer_part = full_response.split("Answer:")[1].strip()
+                yield answer_part, format_sources(sources), gr.update(interactive=True), gr.update(interactive=True)
+            else:
+                # If "Answer:" is not yet in the response, yield the current full response
+                yield full_response, format_sources(sources), gr.update(interactive=True), gr.update(interactive=True)
+        
+        thread.join()
+        
+        # After the thread joins, the full_response should contain the complete generated text.
+        # Extract the answer part for logging, handling cases where "Answer:" might not be present.
+        answer_to_log = full_response.split("Answer:")[1].strip() if "Answer:" in full_response else full_response.strip()
+        
+        # Log conversation
+        conversation_history.append({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "question": question,
+            "answer": answer_to_log,
+            "product_filter": product_filter,
+            "feedback": None
+        })
+        return answer_to_log, format_sources(sources), gr.update(interactive=True), gr.update(interactive=True)
+    except Exception as e:
+        error_message = f"An error occurred: {e}. Please try again."
+        return error_message, "", gr.update(interactive=False), gr.update(interactive=False)
 
 def format_sources(sources: list) -> str:
     """Format sources for display"""
-    return "\n\n".join(
-        f"📌 **{src['product']}** (relevance: {src['score']:.2f}):\n"
-        f"> {src['excerpt'][:150]}..."
-        for src in sources[:2]
-    )
+    if not sources:
+        return ""
+    formatted_sources = []
+    for i, src in enumerate(sources[:2]):
+        formatted_sources.append(
+            f"📌 **Source {i+1}: {src['product']}** (relevance: {src['score']:.2f}):\n"
+            f"> {src['excerpt'][:150]}..."
+        )
+    return "\n\n".join(formatted_sources)
 
 def record_feedback(feedback: str):
     """Record user feedback"""
@@ -137,11 +142,12 @@ with gr.Blocks(
         inputs=[question, product_dropdown, chatbot],
         outputs=[response, sources, thumbs_up, thumbs_down]
     ).then(
-        lambda r, s: ((None, r), (None, s)),
+        lambda r, s: ((None, r), (None, s)) if r else (None, "An error occurred. Please try again."),
         inputs=[response, sources],
         outputs=[chatbot, chatbot]
     ).then(
-        lambda: gr.update(visible=True),
+        lambda r: gr.update(visible=True) if "An error occurred" not in r else gr.update(visible=False),
+        inputs=[response],
         outputs=feedback_row
     )
     
