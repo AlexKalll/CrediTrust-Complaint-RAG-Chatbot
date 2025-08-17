@@ -2,3 +2,7 @@ env/
 vectorstore/
 
 data/
+pycache/
+__pycache__/
+
+.env
