@@ -14,12 +14,12 @@ from src.rag_pipeline import RAGPipeline
 
 # Initialize RAG pipeline
 rag = RAGPipeline(
-    index_path=Path("vectorstore/faiss_index.bin"),
-    metadata_path=Path("vectorstore/metadata.parquet")
+    index_path=root_dir / "vectorstore" / "faiss_index.bin",
+    metadata_path=root_dir / "vectorstore" / "metadata.parquet"
 )
 
 # Get unique products for dropdown
-metadata = pd.read_parquet("vectorstore/metadata.parquet")
+metadata = pd.read_parquet(root_dir / "vectorstore" / "metadata.parquet")
 PRODUCTS = ["All Products"] + sorted(metadata['product'].unique().tolist())
 
 # Conversation history storage
@@ -42,27 +42,10 @@ def respond(question: str, product_filter: str, history: list) -> tuple:
     try:
         # Query RAG pipeline
         result = rag.query(question, product_filter)
-        streamer = result['response_streamer']
+        full_response = result['response']
         sources = result['sources']
-        thread = result['generation_thread']
-        thread.start()
         
-        # Stream response
-        full_response = ""
-        for new_text in streamer:
-            full_response += new_text
-            # Yield the answer part if "Answer:" is present, otherwise yield the full response
-            if "Answer:" in full_response:
-                answer_part = full_response.split("Answer:")[1].strip()
-                yield answer_part, format_sources(sources), gr.update(interactive=True), gr.update(interactive=True)
-            else:
-                # If "Answer:" is not yet in the response, yield the current full response
-                yield full_response, format_sources(sources), gr.update(interactive=True), gr.update(interactive=True)
-        
-        thread.join()
-        
-        # After the thread joins, the full_response should contain the complete generated text.
-        # Extract the answer part for logging, handling cases where "Answer:" might not be present.
+        # The full_response should contain the complete generated text.
         answer_to_log = full_response.split("Answer:")[1].strip() if "Answer:" in full_response else full_response.strip()
         
         # Log conversation
@@ -73,7 +56,8 @@ def respond(question: str, product_filter: str, history: list) -> tuple:
             "product_filter": product_filter,
             "feedback": None
         })
-        return answer_to_log, format_sources(sources), gr.update(interactive=True), gr.update(interactive=True)
+        
+        return answer_to_log, sources, gr.update(interactive=True), gr.update(interactive=True)
     except Exception as e:
         error_message = f"An error occurred: {e}. Please try again."
         return error_message, "", gr.update(interactive=False), gr.update(interactive=False)
@@ -84,9 +68,11 @@ def format_sources(sources: list) -> str:
         return ""
     formatted_sources = []
     for i, src in enumerate(sources[:2]):
+        # Handle both 'excerpt' and 'text' keys for compatibility
+        text_content = src.get('excerpt', src.get('text', ''))
         formatted_sources.append(
             f"📌 **Source {i+1}: {src['product']}** (relevance: {src['score']:.2f}):\n"
-            f"> {src['excerpt'][:150]}..."
+            f"> {text_content[:300]}..."
         )
     return "\n\n".join(formatted_sources)
 
@@ -101,7 +87,9 @@ with gr.Blocks(
     theme=gr.themes.Soft(),
     css="""
     .gradio-container {max-width: 800px !important}
-    .feedback-btns {margin-top: 10px}
+    .feedback-btns {margin-top: 10px; display: flex; justify-content: center; gap: 10px;}
+    .feedback-btns button {flex-grow: 1;}
+    .sources-box {margin-top: 15px; padding: 10px; background-color: #f0f0f0; border-radius: 8px;}
     """
 ) as demo:
     # Header
@@ -127,7 +115,7 @@ with gr.Blocks(
     question = gr.Textbox(label="Ask a question", placeholder="E.g. What are common issues with BNPL services?")
     
     # Feedback buttons
-    with gr.Row(visible=False) as feedback_row:
+    with gr.Row(visible=False, elem_classes="feedback-btns") as feedback_row:
         thumbs_up = gr.Button("👍 Helpful", variant="primary", size="sm")
         thumbs_down = gr.Button("👎 Not Helpful", variant="secondary", size="sm")
     feedback_msg = gr.Textbox(visible=False)
@@ -135,6 +123,10 @@ with gr.Blocks(
     # Hidden components
     response = gr.Textbox(visible=False)
     sources = gr.Textbox(visible=False)
+
+    # Display sources separately
+    with gr.Group(visible=False, elem_classes="sources-box") as sources_display_group:
+        sources_display = gr.Markdown()
     
     # Interaction flow
     question.submit(
@@ -142,9 +134,13 @@ with gr.Blocks(
         inputs=[question, product_dropdown, chatbot],
         outputs=[response, sources, thumbs_up, thumbs_down]
     ).then(
-        lambda r, s: ((None, r), (None, s)) if r else (None, "An error occurred. Please try again."),
+        lambda r, s: (None, r) if r else (None, "An error occurred. Please try again."),
         inputs=[response, sources],
-        outputs=[chatbot, chatbot]
+        outputs=[chatbot]
+    ).then(
+        lambda s: (gr.update(value=format_sources(s), visible=bool(s)), gr.update(visible=bool(s))), # Update sources_display and its visibility
+        inputs=[sources],
+        outputs=[sources_display, sources_display_group]
     ).then(
         lambda r: gr.update(visible=True) if "An error occurred" not in r else gr.update(visible=False),
         inputs=[response],
@@ -153,8 +149,8 @@ with gr.Blocks(
     
     # Button actions
     clear_btn.click(
-        lambda: ([], [], "", gr.update(visible=False)),
-        outputs=[chatbot, question, feedback_msg, feedback_row]
+        lambda: ([], [], "", gr.update(visible=False), gr.update(visible=False), gr.update(value="")), # Clear sources display
+        outputs=[chatbot, question, feedback_msg, feedback_row, sources_display_group, sources_display]
     )
     
     export_btn.click(
@@ -166,16 +162,22 @@ with gr.Blocks(
         fn=lambda: record_feedback("positive"),
         outputs=feedback_msg
     ).then(
-        lambda: gr.update(visible=False),
-        outputs=feedback_row
+        lambda: (gr.update(visible=False), gr.update(visible=False)), # Hide feedback row and sources display
+        outputs=[feedback_row, sources_display_group]
+    ).then(
+        lambda: gr.update(value="", visible=False),
+        outputs=feedback_msg
     )
     
     thumbs_down.click(
         fn=lambda: record_feedback("negative"),
         outputs=feedback_msg
     ).then(
-        lambda: gr.update(visible=False),
-        outputs=feedback_row
+        lambda: (gr.update(visible=False), gr.update(visible=False)), # Hide feedback row and sources display
+        outputs=[feedback_row, sources_display_group]
+    ).then(
+        lambda: gr.update(value="", visible=False),
+        outputs=feedback_msg
     )
 
 if __name__ == "__main__":
