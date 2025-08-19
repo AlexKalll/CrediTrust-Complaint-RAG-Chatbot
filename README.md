@@ -2,57 +2,58 @@
 
 ## Project Overview
 
-This project aims to develop an intelligent complaint analysis tool for CrediTrust Financial, a fast-growing digital finance company. The tool, a Retrieval-Augmented Generation (RAG) powered chatbot, will transform raw, unstructured customer complaint data into actionable insights, enabling internal stakeholders like Product Managers, Support, and Compliance teams to quickly understand customer pain points and emerging trends across various financial products.
+This project develops an intelligent Retrieval-Augmented Generation (RAG) chatbot designed to answer user queries based on a knowledge base of customer complaint narratives. By combining efficient information retrieval with a language model, the chatbot aims to provide relevant and coherent responses to inquiries in the finance sector.
 
-The primary objective is to decrease the time it takes to identify major complaint trends from days to minutes, empower non-technical teams to get answers without needing a data analyst, and shift the company from reacting to problems to proactively identifying and fixing them based on real-time customer feedback.
+## Features
+
+- **Data Preprocessing**: Cleans and prepares raw complaint data for analysis.
+- **Text Chunking & Embedding**: Breaks down large narratives into smaller, semantically rich chunks and converts them into numerical embeddings.
+- **FAISS Indexing**: Utilizes FAISS for fast and efficient similarity search of text embeddings.
+- **RAG Pipeline**: Retrieves relevant information from the knowledge base and uses it to augment language model responses.
+- **Interactive Dashboards**: Provides Streamlit-based interactive visualizations for demonstrating the chatbot's capabilities and exploring complaint data.
+- **CI/CD**: Automated testing and deployment workflows using GitHub Actions.
 
 ## Project Structure
 
-The project is organized into the following directories:
+The repository is organized as follows:
 
 ```
-CrediTrust-Complaint-RAG-Chatbot/
-├── README.md                 \# Project overview and setup instructions
-├── requirements.txt          \# Python dependencies
-├── data/                     \# Stores raw and preprocessed datasets
-│   └── filtered\_complaints.csv \# Cleaned and filtered complaint data
-├── notebooks/                \# Jupyter notebooks for EDA, experimentation, etc.
-│   └── EDA\_and\_Preprocessing.ipynb \# Exploratory Data Analysis and data cleaning steps
-├── src/                      \# Source code for the RAG pipeline components
-│   ├── **init**.py           \# Makes src a Python package
-│   ├── data\_preprocessing.py \# Contains functions for data loading, cleaning, and filtering
-│   ├── text\_chunking\_embedding.py \# Handles text chunking, embedding generation, and vector store management
-│   ├── rag\_pipeline.py       \# Implements the core RAG logic (retriever, generator, prompt engineering)
-│   └── utils.py              \# Helper functions
-├── vectorstore/              \# Persisted vector store files (FAISS/ChromaDB)
-├── app/                      \# Contains the interactive chat interface
-│   └── app.py                \# Gradio/Streamlit application script
-└── docs/                     \# Documentation, reports, and evaluation summaries
-    └── report.md             \# Final project report and evaluation summary
-
+.github/
+  workflows/        # GitHub Actions CI/CD workflows
+dashboards/         # Streamlit applications for interactive dashboards
+docs/               # Project documentation and images
+models/             # (Optional) Pre-trained models or checkpoints
+notebooks/          # Jupyter notebooks for EDA, prototyping, and evaluation
+src/                # Core Python source code
+  data_preprocessing.py     # Scripts for cleaning and preparing data
+  rag_pipeline.py           # Implementation of the RAG pipeline
+  text_chunking_embedding.py # Handles text chunking and embedding generation
+  utils.py                  # Utility functions
+tests/              # Unit and integration tests
+vectorstore/        # FAISS index and metadata storage
+.gitignore          # Specifies intentionally untracked files to ignore
+README.md           # Project README file
+design-doc.md       # Detailed design document
+requirements.txt    # Python dependencies
 ```
 
-## Setup Instructions
+## Setup and Installation
 
-### Prerequisites
-
-* Python 3.8+
-
-### Installation
+To set up the project locally, follow these steps:
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/AlexKalll/CrediTrust-Complaint-RAG-Chatbot.git
+    git clone https://github.com/your-username/CrediTrust-Complaint-RAG-Chatbot.git
     cd CrediTrust-Complaint-RAG-Chatbot
     ```
 
-2.  **Create and activate a virtual environment (recommended):**
+2.  **Create a virtual environment (recommended):**
     ```bash
-    python -m venv venv
+    python -m venv env
     # On Windows
-    venv\Scripts\activate
+    .\env\Scripts\activate
     # On macOS/Linux
-    source venv/bin/activate
+    source env/bin/activate
     ```
 
 3.  **Install dependencies:**
@@ -60,86 +61,93 @@ CrediTrust-Complaint-RAG-Chatbot/
     pip install -r requirements.txt
     ```
 
-## Data
+4.  **Download necessary data:**
+    Ensure you have your `filtered_complaints.csv` file in the `data/` directory. This file is crucial for the `text_chunking_embedding.py` script.
 
-The dataset used in this project is sourced from the Consumer Financial Protection Bureau (CFPB) complaint data. It includes real customer complaints across various financial products. The core input for the RAG system is the `Consumer complaint narrative` column.
+5.  **Test the setup:**
+    ```bash
+    python test_setup.py
+    ```
 
-The `data/filtered_complaints.csv` file contains the preprocessed and filtered subset of this data, specifically targeting the five key product categories and removing entries without narratives.
+## Usage
 
-## Current Progress
+### 1. Data Preparation and Indexing
 
-**Task 1: Exploratory Data Analysis and Data Preprocessing**
-* **Status:** Completed.
-* **Description:** Performed initial EDA on the CFPB complaint dataset, analyzed complaint distributions, narrative lengths, and identified records with/without narratives. The dataset has been filtered to include only records for "Credit card", "Personal loan", "Buy Now, Pay Later (BNPL)", "Savings account", and "Money transfers" products, and records with empty `Consumer complaint narrative` fields have been removed. Text narratives have been cleaned (lowercasing, special character removal).
-* **Output:** The cleaned and filtered dataset is saved at `data/filtered_complaints.csv`. A detailed analysis is provided in `docs/report.md` and the `notebooks/EDA_and_Preprocessing.ipynb` notebook.
+First, you need to process the complaint data, generate embeddings, and create the FAISS index. This can be done by running the `text_chunking_embedding.py` script:
 
-**Task 2: Text Chunking, Embedding, and Vector Store Indexing**
-* **Status:** Completed.
-* **Description:** Implemented logic for text chunking using `LangChain's RecursiveCharacterTextSplitter`. Chosen `sentence-transformers/all-MiniLM-L6-v2` for generating embeddings. Integrated FAISS for efficient vector storage and retrieval, ensuring metadata (Complaint ID, Product, Issue) is stored alongside embeddings for source attribution.
-* **Output:** Expected outputs include `data/complaint_chunks.csv`, `vectorstore/faiss_index.bin`, and `vectorstore/metadata.csv`. Detailed findings and justifications will be added to `docs/report.md` after execution.
-
-## How to Run
-
-### 1. Launch the Chat Interface
 ```bash
-python app/app.py
+python src/text_chunking_embedding.py
 ```
-Access at: `http://localhost:7860`
+This script will:
+- Load data from `data/filtered_complaints.csv`.
+- Chunk the narratives and generate embeddings.
+- Save the chunks, embeddings, and metadata to the `vectorstore/` directory.
 
-### 2. Command Line Query
+### 2. Running the Applications
+
+#### Option A: Easy Startup (Recommended)
+Use the startup script to choose your interface:
+
 ```bash
-python src/rag_pipeline.py --query "What are common BNPL issues?"
+python run_app.py
 ```
 
-### System Requirements
-| Component | Minimum Specs |
-|-----------|---------------|
-| CPU | 4 cores (Intel i5+) |
-| RAM | 8GB |
-| Disk Space | 5GB (including models) |
+#### Option B: Direct Commands
+**Streamlit (Recommended - Better UI):**
+```bash
+streamlit run dashboards/streamlit_app.py
+```
 
-## Key Features
+**Gradio (Alternative):**
+```bash
+python dashboards/app.py
+```
 
-✅ **Complaint Analysis**
-- Semantic search across 400K+ complaints
-- Product-specific filtering (5 categories)
+Both applications will open in your web browser, allowing you to interact with the chatbot and visualize the data.
 
-✅ **User Experience**
-- Streaming responses
-- Source attribution
-- Feedback collection
+### 3. Running Tests
 
-✅ **Deployment Ready**
-- CPU-optimized
-- Container support (Dfile included)
-- Modular architecture
+To run the project's tests, use `pytest` (ensure it's installed via `requirements.txt`):
 
-## Example Usage
+```bash
+pytest tests/
+```
 
-1. **Ask about product issues:**
-   ```
-   "Show recent complaints about credit card late fees"
-   ```
+## CI/CD Pipeline
 
-2. **Compare products:**
-   ```
-   "What issues are unique to BNPL vs personal loans?"
-   ```
-
-3. **Investigate trends:**
-   ```
-   "Are mobile app complaints increasing?"
-   ```
+The project uses GitHub Actions for continuous integration and continuous deployment. The workflow defined in `.github/workflows/ci.yml` automatically builds and tests the application on every push to `main` and on pull requests targeting `main`.
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Slow responses | Reduce chunk size in `src/retriever.py` |
-| OOM errors | Decrease batch size in `src/generator.py` |
-| Model not found | Download GGUF model to `models/` |
+### Common Issues and Solutions
 
+1. **Import Errors:**
+   - Ensure all dependencies are installed: `pip install -r requirements.txt`
+   - Check that you're using Python 3.8 or higher
+   - Verify your virtual environment is activated
 
+2. **Model File Not Found:**
+   - The app will automatically use fallback models if the main GGUF model is missing
+   - For best performance, download the Mistral model to the `models/` directory
+
+3. **Data Loading Issues:**
+   - Ensure `filtered_complaints.csv` exists in the `data/` directory
+   - Check that the CSV has the required columns: 'Consumer complaint narrative', 'Product', 'Complaint ID'
+
+4. **Performance Issues:**
+   - The app uses CPU by default for compatibility
+   - For better performance, ensure you have sufficient RAM (8GB+ recommended)
+
+5. **Running the Setup Test:**
+   ```bash
+   python test_setup.py
+   ```
+   This will identify any configuration issues.
+
+## Contributing
+
+Contributions are welcome! Please refer to the `design-doc.md` for a deeper understanding of the project's architecture and components.
 
 ## License
-Apache 2.0 - See [LICENSE](LICENSE)
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
