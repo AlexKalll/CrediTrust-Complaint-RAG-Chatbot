@@ -1,5 +1,5 @@
 # CrediTrust Complaint RAG Chatbot
-
+![image](screenshoots/copy_main.png)
 ## Project Overview
 
 This project develops an intelligent Retrieval-Augmented Generation (RAG) chatbot designed to answer user queries based on a knowledge base of customer complaint narratives. By combining efficient information retrieval with a language model, the chatbot aims to provide relevant and coherent responses to inquiries in the finance sector.
