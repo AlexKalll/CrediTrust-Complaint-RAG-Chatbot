@@ -333,10 +333,13 @@ def initialize_rag():
 @st.cache_data
 def load_analytics_data():
     try:
-        # Use the filtered complaints CSV file
+        # First try to load the actual complaints data
         data_file = root_dir / "data" / "filtered_complaints.csv"
+        sample_file = root_dir / "data" / "sample_complaints.csv"
+        
         if data_file.exists():
             data = load_data(str(data_file))
+            # st.success("✅ Loaded your actual complaint data!")
             
             # Handle column mapping for analytics
             column_mapping = {
@@ -355,9 +358,29 @@ def load_analytics_data():
                 st.warning("⚠️ 'Product' column not found in data. Analytics may be limited.")
             
             return data
+            
+        elif sample_file.exists():
+            # Load sample data for demonstration
+            data = load_data(str(sample_file))
+            # st.info("📊 Using sample data for demonstration. Add your own data for full functionality.")
+            
+            # Handle column mapping for sample data
+            column_mapping = {
+                'Product': 'product',
+                'Consumer complaint narrative': 'narrative',
+                'Issue': 'Issue'
+            }
+            
+            # Rename columns that exist
+            for old_name, new_name in column_mapping.items():
+                if old_name in data.columns:
+                    data = data.rename(columns={old_name: new_name})
+            
+            return data
+            
         else:
-            st.warning(f"Data file not found at {data_file}. Using demo data for demonstration.")
-            # Create demo data for demonstration
+            st.warning("⚠️ No data files found. Creating minimal demo data.")
+            # Create minimal demo data as last resort
             demo_data = pd.DataFrame({
                 'product': ['Credit Card', 'Personal Loan', 'Mortgage', 'Checking Account', 'Savings Account'],
                 'Issue': ['Billing Error', 'Unclear Terms', 'High Interest', 'Fees', 'Customer Service'],

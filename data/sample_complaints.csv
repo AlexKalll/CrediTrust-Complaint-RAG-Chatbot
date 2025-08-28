@@ -1,0 +1,16 @@
+Product,Consumer complaint narrative,Issue,Complaint ID
+Credit Card,"I was charged an annual fee without being notified. The customer service representative was unhelpful and refused to waive the fee even though I've been a customer for 5 years.",Billing Error,CC001
+Personal Loan,"The loan terms were not clearly explained during the application process. I was surprised by hidden fees that weren't mentioned upfront.",Unclear Terms,PL001
+Mortgage,"My mortgage payment increased significantly due to property tax changes, but I wasn't informed about this possibility when I signed the loan.",High Interest,MT001
+Checking Account,"I was charged multiple overdraft fees for transactions that should have been declined. The bank's overdraft protection policy is confusing.",Fees,CA001
+Savings Account,"The interest rate on my savings account was reduced without any notification. I only found out when checking my monthly statement.",Customer Service,SA001
+Credit Card,"I reported fraudulent charges on my card, but it took over a week to get a replacement card. This left me without access to funds.",Billing Error,CC002
+Personal Loan,"The loan approval process took much longer than promised. I was told 3-5 business days but it took 3 weeks.",Unclear Terms,PL002
+Mortgage,"There were errors in my monthly mortgage statement that took multiple phone calls to resolve. The customer service was inconsistent.",High Interest,MT002
+Checking Account,"I was charged a monthly maintenance fee even though I met the minimum balance requirement. The bank couldn't explain why.",Fees,CA002
+Savings Account,"I tried to transfer money online but the system was down for maintenance. There was no advance notice about this.",Customer Service,SA002
+Credit Card,"The credit limit increase I requested was denied without explanation. I have excellent credit and payment history.",Billing Error,CC003
+Personal Loan,"The loan officer promised a specific interest rate but when I received the final documents, it was higher than quoted.",Unclear Terms,PL003
+Mortgage,"My escrow account was not properly managed, leading to a large unexpected payment when my property taxes increased.",High Interest,MT003
+Checking Account,"I was charged foreign transaction fees when using my card abroad, but these fees weren't clearly disclosed.",Fees,CA003
+Savings Account,"The mobile app frequently crashes when I try to check my balance or make transfers.",Customer Service,SA003

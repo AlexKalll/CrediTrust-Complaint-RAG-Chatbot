@@ -1,8 +1,16 @@
 env/
 vectorstore/
 
-data/
+# Data files (exclude all CSV files by default)
+data/*.csv
+
+# But allow sample data for demo
+!data/sample_complaints.csv
+!data/README.md
+
+# Python cache
 pycache/
 __pycache__/
 
-.env
+# Environment variables
+.env 
