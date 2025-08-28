@@ -2,8 +2,6 @@ import gradio as gr
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from transformers import TextIteratorStreamer
-from threading import Thread
 import csv
 import os
 
@@ -38,14 +36,14 @@ def save_conversation():
     return filename
 
 def respond(question: str, product_filter: str, history: list) -> tuple:
-    """Handle user question with streaming"""
+    """Handle user question"""
     try:
         # Query RAG pipeline
         result = rag.query(question, product_filter)
         full_response = result['response']
         sources = result['sources']
         
-        # The full_response should contain the complete generated text.
+        # Extract answer from response
         answer_to_log = full_response.split("Answer:")[1].strip() if "Answer:" in full_response else full_response.strip()
         
         # Log conversation
@@ -84,13 +82,7 @@ def record_feedback(feedback: str):
 
 with gr.Blocks(
     title="CreditTrust AI Analyst",
-    theme=gr.themes.Soft(),
-    css="""
-    .gradio-container {max-width: 800px !important}
-    .feedback-btns {margin-top: 10px; display: flex; justify-content: center; gap: 10px;}
-    .feedback-btns button {flex-grow: 1;}
-    .sources-box {margin-top: 15px; padding: 10px; background-color: #f0f0f0; border-radius: 8px;}
-    """
+    theme=gr.themes.Soft()
 ) as demo:
     # Header
     gr.Markdown("""
@@ -111,11 +103,11 @@ with gr.Blocks(
         export_btn = gr.Button("💾 Export Conversation", size="sm")
     
     # Chat interface
-    chatbot = gr.Chatbot(height=400, avatar_images=("assets/user.png", "assets/bot.png"))
+    chatbot = gr.Chatbot(height=400)
     question = gr.Textbox(label="Ask a question", placeholder="E.g. What are common issues with BNPL services?")
     
     # Feedback buttons
-    with gr.Row(visible=False, elem_classes="feedback-btns") as feedback_row:
+    with gr.Row(visible=False) as feedback_row:
         thumbs_up = gr.Button("👍 Helpful", variant="primary", size="sm")
         thumbs_down = gr.Button("👎 Not Helpful", variant="secondary", size="sm")
     feedback_msg = gr.Textbox(visible=False)
@@ -125,7 +117,7 @@ with gr.Blocks(
     sources = gr.Textbox(visible=False)
 
     # Display sources separately
-    with gr.Group(visible=False, elem_classes="sources-box") as sources_display_group:
+    with gr.Group(visible=False) as sources_display_group:
         sources_display = gr.Markdown()
     
     # Interaction flow
@@ -138,7 +130,7 @@ with gr.Blocks(
         inputs=[response, sources],
         outputs=[chatbot]
     ).then(
-        lambda s: (gr.update(value=format_sources(s), visible=bool(s)), gr.update(visible=bool(s))), # Update sources_display and its visibility
+        lambda s: (gr.update(value=format_sources(s), visible=bool(s)), gr.update(visible=bool(s))),
         inputs=[sources],
         outputs=[sources_display, sources_display_group]
     ).then(
@@ -149,7 +141,7 @@ with gr.Blocks(
     
     # Button actions
     clear_btn.click(
-        lambda: ([], [], "", gr.update(visible=False), gr.update(visible=False), gr.update(value="")), # Clear sources display
+        lambda: ([], [], "", gr.update(visible=False), gr.update(visible=False), gr.update(value="")),
         outputs=[chatbot, question, feedback_msg, feedback_row, sources_display_group, sources_display]
     )
     
@@ -162,7 +154,7 @@ with gr.Blocks(
         fn=lambda: record_feedback("positive"),
         outputs=feedback_msg
     ).then(
-        lambda: (gr.update(visible=False), gr.update(visible=False)), # Hide feedback row and sources display
+        lambda: (gr.update(visible=False), gr.update(visible=False)),
         outputs=[feedback_row, sources_display_group]
     ).then(
         lambda: gr.update(value="", visible=False),
@@ -173,7 +165,7 @@ with gr.Blocks(
         fn=lambda: record_feedback("negative"),
         outputs=feedback_msg
     ).then(
-        lambda: (gr.update(visible=False), gr.update(visible=False)), # Hide feedback row and sources display
+        lambda: (gr.update(visible=False), gr.update(visible=False)),
         outputs=[feedback_row, sources_display_group]
     ).then(
         lambda: gr.update(value="", visible=False),
@@ -183,6 +175,5 @@ with gr.Blocks(
 if __name__ == "__main__":
     demo.launch(
         server_name="0.0.0.0",
-        server_port=7860,
-        favicon_path="assets/favicon.ico"
+        server_port=7860
     )
