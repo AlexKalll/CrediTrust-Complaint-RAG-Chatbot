@@ -19,3 +19,4 @@ accelerate
 llama-cpp-python
 transformers
 pytest
+plotly
