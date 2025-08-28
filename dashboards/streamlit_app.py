@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 from pathlib import Path
 import sys
 import os
@@ -11,17 +9,48 @@ import base64
 from io import BytesIO
 import time
 
+# Try to import plotly, but handle gracefully if not available
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+    st.warning("⚠️ Plotly not available. Charts will be displayed as simple text.")
+
 # Add root directory to path
 root_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_dir))
 
-# Import RAG pipeline
+# Import RAG pipeline with graceful fallback
 try:
     from src.rag_pipeline import RAGPipeline
     from src.data_preprocessing import load_data
+    IMPORTS_AVAILABLE = True
 except ImportError as e:
-    st.error(f"Import error: {e}")
-    st.stop()
+    IMPORTS_AVAILABLE = False
+    st.warning(f"⚠️ Some imports are not available: {e}")
+    st.info("The app will run in demo mode with limited functionality.")
+    
+    # Create dummy classes for demo mode
+    class DummyRAGPipeline:
+        def query(self, prompt, product_filter):
+            return {
+                'response': 'This is a demo response. The full RAG pipeline is not available in this environment.',
+                'sources': []
+            }
+    
+    class DummyDataLoader:
+        @staticmethod
+        def load_data(file_path):
+            return pd.DataFrame({
+                'product': ['Credit Card', 'Personal Loan', 'Mortgage', 'Checking Account', 'Savings Account'],
+                'Issue': ['Billing Error', 'Unclear Terms', 'High Interest', 'Fees', 'Customer Service'],
+                'narrative': ['Sample complaint text 1', 'Sample complaint text 2', 'Sample complaint text 3', 'Sample complaint text 4', 'Sample complaint text 5']
+            })
+    
+    RAGPipeline = DummyRAGPipeline
+    load_data = DummyDataLoader.load_data
 
 # Page configuration
 st.set_page_config(
@@ -418,6 +447,13 @@ with st.sidebar:
     st.markdown("### ℹ️ System Info")
     st.info(f"**RAG Pipeline:** {'✅ Active' if rag else '❌ Inactive'}")
     st.info(f"**Data Loaded:** {'✅ Yes' if data is not None else '❌ No'}")
+    st.info(f"**Plotly Charts:** {'✅ Available' if PLOTLY_AVAILABLE else '❌ Not Available'}")
+    st.info(f"**Imports:** {'✅ All Available' if IMPORTS_AVAILABLE else '⚠️ Demo Mode'}")
+    
+    # Deployment status
+    if not IMPORTS_AVAILABLE or not PLOTLY_AVAILABLE:
+        st.warning("⚠️ **Deployment Mode:** Some features are limited")
+        st.info("This is normal for cloud deployments. The app will work with reduced functionality.")
     
     # Debug information
     if st.checkbox("🔧 Show Debug Info", key="debug_toggle"):
@@ -443,8 +479,10 @@ with st.sidebar:
         else:
             st.error("❌ RAG pipeline failed to initialize")
     
-    if rag:
+    if rag and IMPORTS_AVAILABLE:
         st.success("🚀 Ready to chat!")
+    elif not IMPORTS_AVAILABLE:
+        st.info("🎭 Demo mode - limited functionality")
     else:
         st.error("❌ Chat functionality unavailable")
 
@@ -541,21 +579,29 @@ if st.session_state.show_analytics and data is not None:
     with col1:
         # Product distribution
         if 'product' in data.columns:
-            product_counts = data['product'].value_counts().head(10)
-            fig = px.pie(
-                values=product_counts.values,
-                names=product_counts.index,
-                title="📊 Top 10 Products by Complaint Volume",
-                color_discrete_sequence=px.colors.qualitative.Set3
-            )
-            fig.update_traces(textposition='inside', textinfo='percent+label')
-            fig.update_layout(
-                title_font_size=16,
-                title_font_color="#333",
-                showlegend=True,
-                height=400
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if PLOTLY_AVAILABLE:
+                product_counts = data['product'].value_counts().head(10)
+                fig = px.pie(
+                    values=product_counts.values,
+                    names=product_counts.index,
+                    title="📊 Top 10 Products by Complaint Volume",
+                    color_discrete_sequence=px.colors.qualitative.Set3
+                )
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(
+                    title_font_size=16,
+                    title_font_color="#333",
+                    showlegend=True,
+                    height=400
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                # Fallback to text display
+                product_counts = data['product'].value_counts().head(10)
+                st.markdown("### 📊 Top 10 Products by Complaint Volume")
+                for i, (product, count) in enumerate(product_counts.items(), 1):
+                    percentage = (count / len(data)) * 100
+                    st.markdown(f"**{i}.** {product}: {count} complaints ({percentage:.1f}%)")
         else:
             st.info("📊 Product data not available for charting")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -563,42 +609,57 @@ if st.session_state.show_analytics and data is not None:
     with col2:
         # Issue distribution (if available)
         if 'Issue' in data.columns:
-            issue_counts = data['Issue'].value_counts().head(10)
-            fig = px.bar(
-                x=issue_counts.values,
-                y=issue_counts.index,
-                orientation='h',
-                title="📋 Top 10 Issue Types",
-                color=issue_counts.values,
-                color_continuous_scale='Viridis'
-            )
-            fig.update_layout(
-                title_font_size=16,
-                title_font_color="#333",
-                xaxis_title="Number of Complaints",
-                yaxis_title="Issue Type",
-                height=400
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            # Timeline chart
-            if 'date' in data.columns:
-                data['date'] = pd.to_datetime(data['date'], errors='coerce')
-                monthly_counts = data.groupby(data['date'].dt.to_period('M')).size()
-                fig = px.line(
-                    x=monthly_counts.index.astype(str),
-                    y=monthly_counts.values,
-                    title="📅 Complaints Over Time",
-                    markers=True
+            if PLOTLY_AVAILABLE:
+                issue_counts = data['Issue'].value_counts().head(10)
+                fig = px.bar(
+                    x=issue_counts.values,
+                    y=issue_counts.index,
+                    orientation='h',
+                    title="📋 Top 10 Issue Types",
+                    color=issue_counts.values,
+                    color_continuous_scale='Viridis'
                 )
                 fig.update_layout(
                     title_font_size=16,
                     title_font_color="#333",
-                    xaxis_title="Month",
-                    yaxis_title="Number of Complaints",
+                    xaxis_title="Number of Complaints",
+                    yaxis_title="Issue Type",
                     height=400
                 )
                 st.plotly_chart(fig, use_container_width=True)
+            else:
+                # Fallback to text display
+                issue_counts = data['Issue'].value_counts().head(10)
+                st.markdown("### 📋 Top 10 Issue Types")
+                for i, (issue, count) in enumerate(issue_counts.items(), 1):
+                    percentage = (count / len(data)) * 100
+                    st.markdown(f"**{i}.** {issue}: {count} complaints ({percentage:.1f}%)")
+        else:
+            # Timeline chart
+            if 'date' in data.columns:
+                if PLOTLY_AVAILABLE:
+                    data['date'] = pd.to_datetime(data['date'], errors='coerce')
+                    monthly_counts = data.groupby(data['date'].dt.to_period('M')).size()
+                    fig = px.line(
+                        x=monthly_counts.index.astype(str),
+                        y=monthly_counts.values,
+                        title="📅 Complaints Over Time",
+                        markers=True
+                    )
+                    fig.update_layout(
+                        title_font_size=16,
+                        title_font_color="#333",
+                        xaxis_title="Month",
+                        yaxis_title="Number of Complaints",
+                        height=400
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    # Fallback to text display
+                    st.markdown("### 📅 Complaints Over Time")
+                    st.info("Timeline chart not available without plotly. Please check the data for temporal patterns manually.")
+            else:
+                st.info("📊 No date column available for timeline analysis")
         st.markdown('</div>', unsafe_allow_html=True)
 
 # Chat Interface

@@ -1,22 +1,32 @@
-# Project dependencies
-pandas
-numpy
-matplotlib
-seaborn
-langchain
-langchain-community
-sentence-transformers
-faiss-cpu
-chromadb
-gradio
-streamlit
-huggingface-hub
-python-dotenv
-dask
-pyarrow
-nltk
-accelerate
-llama-cpp-python
-transformers
-pytest
-plotly
+# Core dependencies
+streamlit>=1.28.0
+pandas>=1.5.0
+numpy>=1.21.0
+
+# Data visualization
+plotly>=5.15.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# AI/ML dependencies
+langchain>=0.0.300
+langchain-community>=0.0.10
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.0
+transformers>=4.20.0
+accelerate>=0.20.0
+
+# Data processing
+chromadb>=0.4.0
+dask>=2022.0.0
+pyarrow>=10.0.0
+nltk>=3.8
+
+# UI frameworks
+gradio>=3.40.0
+
+# Utilities
+huggingface-hub>=0.15.0
+python-dotenv>=1.0.0
+llama-cpp-python>=0.2.0
+pytest>=7.0.0
