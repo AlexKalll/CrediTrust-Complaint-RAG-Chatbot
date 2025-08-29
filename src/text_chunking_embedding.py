@@ -16,31 +16,35 @@ logger = logging.getLogger(__name__)
 
 # --- Configuration Paths ---
 BASE_DIR = Path(__file__).parent.parent
-CHUNKS_OUTPUT_PATH = BASE_DIR / 'data/complaint_chunks.parquet'
-FAISS_INDEX_PATH = BASE_DIR / 'vectorstore/faiss_index.bin'
-METADATA_OUTPUT_PATH = BASE_DIR / 'vectorstore/metadata.parquet'
+CHUNKS_OUTPUT_PATH = BASE_DIR / "data/complaint_chunks.parquet"
+FAISS_INDEX_PATH = BASE_DIR / "vectorstore/faiss_index.bin"
+METADATA_OUTPUT_PATH = BASE_DIR / "vectorstore/metadata.parquet"
 
 # --- Model and Chunking Parameters ---
-EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 EMBEDDING_BATCH_SIZE = 32
 FAISS_NLIST = 100  # Number of clusters for IVF index
+
 
 class TextChunkingEmbedding:
     """
     A class to handle text chunking, embedding generation, and FAISS indexing.
     It encapsulates the entire process from loading raw data to creating a searchable FAISS index.
     """
-    def __init__(self,
-                 chunks_output_path: Path = CHUNKS_OUTPUT_PATH,
-                 faiss_index_path: Path = FAISS_INDEX_PATH,
-                 metadata_output_path: Path = METADATA_OUTPUT_PATH,
-                 embedding_model_name: str = EMBEDDING_MODEL_NAME,
-                 chunk_size: int = CHUNK_SIZE,
-                 chunk_overlap: int = CHUNK_OVERLAP,
-                 embedding_batch_size: int = EMBEDDING_BATCH_SIZE,
-                 faiss_nlist: int = FAISS_NLIST):
+
+    def __init__(
+        self,
+        chunks_output_path: Path = CHUNKS_OUTPUT_PATH,
+        faiss_index_path: Path = FAISS_INDEX_PATH,
+        metadata_output_path: Path = METADATA_OUTPUT_PATH,
+        embedding_model_name: str = EMBEDDING_MODEL_NAME,
+        chunk_size: int = CHUNK_SIZE,
+        chunk_overlap: int = CHUNK_OVERLAP,
+        embedding_batch_size: int = EMBEDDING_BATCH_SIZE,
+        faiss_nlist: int = FAISS_NLIST,
+    ):
         """
         Initializes the TextChunkingEmbedding pipeline with specified paths and parameters.
 
@@ -78,12 +82,14 @@ class TextChunkingEmbedding:
         Raises:
             ValueError: If required columns ('Complaint ID', 'Product', 'Cleaned_Narrative') are missing from the input DataFrame.
         """
-        required_columns = {'Cleaned_Narrative', 'Complaint ID', 'Product'}
+        required_columns = {"Cleaned_Narrative", "Complaint ID", "Product"}
         if not required_columns.issubset(df.columns):
             missing = required_columns - set(df.columns)
             raise ValueError(f"Missing required columns: {missing}")
 
-        logger.info(f"Chunking narratives (size={self.chunk_size}, overlap={self.chunk_overlap})...")
+        logger.info(
+            f"Chunking narratives (size={self.chunk_size}, overlap={self.chunk_overlap})..."
+        )
 
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.chunk_size,
@@ -94,26 +100,30 @@ class TextChunkingEmbedding:
 
         all_chunks = []
         for _, row in df.iterrows():
-            narrative = str(row['Cleaned_Narrative']).strip()
+            narrative = str(row["Cleaned_Narrative"]).strip()
             if not narrative:
                 continue
 
             chunks = text_splitter.create_documents(
                 texts=[narrative],
-                metadatas=[{
-                    'complaint_id': row['Complaint ID'],
-                    'product': row['Product'],
-                    'issue': row.get('Issue', 'General complaint'),
-                    'original_length': len(narrative)
-                }]
+                metadatas=[
+                    {
+                        "complaint_id": row["Complaint ID"],
+                        "product": row["Product"],
+                        "issue": row.get("Issue", "General complaint"),
+                        "original_length": len(narrative),
+                    }
+                ],
             )
 
             for chunk in chunks:
-                all_chunks.append({
-                    **chunk.metadata,
-                    'chunk_text': chunk.page_content,
-                    'chunk_length': len(chunk.page_content)
-                })
+                all_chunks.append(
+                    {
+                        **chunk.metadata,
+                        "chunk_text": chunk.page_content,
+                        "chunk_length": len(chunk.page_content),
+                    }
+                )
 
         df_chunks = pd.DataFrame(all_chunks)
         logger.info(f"Created {len(df_chunks)} chunks from {len(df)} narratives")
@@ -153,21 +163,23 @@ class TextChunkingEmbedding:
             ValueError: If the input DataFrame `df_chunks` does not contain a 'chunk_text' column.
             RuntimeError: If the embedding generation process fails (e.g., model not loaded, encoding error).
         """
-        if 'chunk_text' not in df_chunks.columns:
+        if "chunk_text" not in df_chunks.columns:
             raise ValueError("DataFrame missing 'chunk_text' column")
 
         model = self.load_embedding_model()
         logger.info("Generating embeddings (this may take a while)...")
-        texts = df_chunks['chunk_text'].tolist()
+        texts = df_chunks["chunk_text"].tolist()
 
         try:
             embeddings = model.encode(
                 texts,
                 batch_size=self.embedding_batch_size,
                 show_progress_bar=True,
-                convert_to_numpy=True
+                convert_to_numpy=True,
             )
-            logger.info(f"Generated {len(embeddings)} embeddings with dimension {embeddings.shape[1]}")
+            logger.info(
+                f"Generated {len(embeddings)} embeddings with dimension {embeddings.shape[1]}"
+            )
             return embeddings
         except Exception as e:
             logger.error(f"Failed to generate embeddings: {e}")
@@ -192,7 +204,9 @@ class TextChunkingEmbedding:
             raise ValueError("Embeddings must be a 2D array.")
 
         dimension = embeddings.shape[1]
-        logger.info(f"Creating FAISS index with dimension {dimension} and nlist {self.faiss_nlist}...")
+        logger.info(
+            f"Creating FAISS index with dimension {dimension} and nlist {self.faiss_nlist}..."
+        )
 
         # Ensure nlist is not greater than the number of embeddings
         nlist = min(self.faiss_nlist, embeddings.shape[0])
@@ -205,7 +219,9 @@ class TextChunkingEmbedding:
         try:
             index.train(embeddings)
             index.add(embeddings)
-            logger.info(f"FAISS index created and populated with {index.ntotal} vectors.")
+            logger.info(
+                f"FAISS index created and populated with {index.ntotal} vectors."
+            )
             return index
         except Exception as e:
             logger.error(f"Failed to create FAISS index: {e}")
@@ -225,7 +241,13 @@ class TextChunkingEmbedding:
 
         logger.info(f"Saving chunks metadata to {self.metadata_output_path}...")
         # Select only relevant columns for metadata to save space and ensure consistency
-        metadata_cols = ['complaint_id', 'product', 'issue', 'chunk_text', 'chunk_length']
+        metadata_cols = [
+            "complaint_id",
+            "product",
+            "issue",
+            "chunk_text",
+            "chunk_length",
+        ]
         df_chunks[metadata_cols].to_parquet(self.metadata_output_path, index=False)
 
         logger.info(f"Saving FAISS index to {self.faiss_index_path}...")
@@ -244,7 +266,7 @@ class TextChunkingEmbedding:
             Tuple[pd.DataFrame, faiss.Index]: A tuple containing the DataFrame of chunks and the FAISS index.
         """
         logger.info("Starting Text Chunking and Embedding Pipeline...")
-        
+
         # 1. Load Data
         df = load_data(input_data_path)
 
@@ -266,29 +288,34 @@ class TextChunkingEmbedding:
         logger.info("Text Chunking and Embedding Pipeline Completed.")
         return df_chunks, faiss_index
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Example Usage:
     # Ensure you have a 'filtered_complaints.csv' in the 'data' directory
-    dummy_data_path = BASE_DIR / 'data/filtered_complaints.csv'
+    dummy_data_path = BASE_DIR / "data/filtered_complaints.csv"
     if not dummy_data_path.exists():
         print(f"Creating dummy data at {dummy_data_path} for demonstration.")
-        dummy_df = pd.DataFrame({
-            'Complaint ID': [1, 2, 3],
-            'Product': ['Credit card', 'Personal loan', 'Credit card'],
-            'Consumer complaint narrative': [
-                'This is a test complaint about a credit card. It has numbers like 123 and symbols!@#.',
-                'Another complaint regarding bank services. Missing values here.',
-                'A third complaint, very clear and concise. No issues.'
-            ],
-            'Issue': ['Billing error', 'Unclear terms', 'No issues']
-        })
+        dummy_df = pd.DataFrame(
+            {
+                "Complaint ID": [1, 2, 3],
+                "Product": ["Credit card", "Personal loan", "Credit card"],
+                "Consumer complaint narrative": [
+                    "This is a test complaint about a credit card. It has numbers like 123 and symbols!@#.",
+                    "Another complaint regarding bank services. Missing values here.",
+                    "A third complaint, very clear and concise. No issues.",
+                ],
+                "Issue": ["Billing error", "Unclear terms", "No issues"],
+            }
+        )
         dummy_df.to_csv(dummy_data_path, index=False)
 
     pipeline = TextChunkingEmbedding()
     chunks_df, index = pipeline.run_pipeline(dummy_data_path)
-    print(f"\nSuccessfully processed {len(chunks_df)} chunks and created FAISS index with {index.ntotal} vectors.")
+    print(
+        f"\nSuccessfully processed {len(chunks_df)} chunks and created FAISS index with {index.ntotal} vectors."
+    )
 
     # Clean up dummy data if created by this script
-    if 'dummy_df' in locals() and dummy_data_path.exists():
+    if "dummy_df" in locals() and dummy_data_path.exists():
         print(f"Cleaning up dummy data at {dummy_data_path}.")
         os.remove(dummy_data_path)
