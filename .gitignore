@@ -1,5 +1,5 @@
 env/
-vectorstore/
+# vectorstore/
 
 # Data files (exclude all CSV files by default)
 data/*.csv
