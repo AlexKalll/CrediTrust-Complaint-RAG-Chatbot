@@ -24,21 +24,83 @@ root_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_dir))
 
 # Import RAG pipeline with graceful fallback
+IMPORTS_AVAILABLE = False
+try:
+    # First try to import faiss to check if it's available
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+    # This is expected in some deployment environments
+    pass
+
 try:
     from src.rag_pipeline import RAGPipeline
     from src.data_preprocessing import load_data
-
     IMPORTS_AVAILABLE = True
 except ImportError as e:
     IMPORTS_AVAILABLE = False
-    st.warning(f"⚠️ Some imports are not available: {e}")
-    st.info("The app will run in demo mode with limited functionality.")
+    error_msg = str(e)
+    if 'faiss' in error_msg or not FAISS_AVAILABLE:
+        st.warning("⚠️ FAISS not available. The RAG pipeline requires faiss-cpu package.")
+        st.info("💡 **Solution:** Add `faiss-cpu` to requirements.txt (already included). If deployment fails, the app will run in demo mode.")
+    else:
+        st.warning(f"⚠️ Some imports are not available: {e}")
+        st.info("The app will run in demo mode with limited functionality.")
 
     # Create dummy classes for demo mode
     class DummyRAGPipeline:
-        def query(self, prompt, product_filter):
+        def __init__(self, index_path=None, metadata_path=None):
+            """Dummy RAG pipeline that accepts initialization arguments but doesn't use them"""
+            self.index_path = index_path
+            self.metadata_path = metadata_path
+            pass
+        
+        def query(self, prompt, product_filter=None):
+            """Returns a helpful demo response when RAG pipeline is unavailable"""
+            # Provide intelligent fallback responses based on common questions
+            prompt_lower = prompt.lower()
+            
+            if any(word in prompt_lower for word in ['common', 'frequent', 'top', 'issues', 'problem']):
+                response = """
+                **Common Issues in Financial Services:**
+                
+                Based on typical consumer complaints, the most frequent issues include:
+                - **Billing Errors**: Unauthorized charges, incorrect fees, billing disputes
+                - **Customer Service**: Poor communication, unresponsive support, long wait times
+                - **Unclear Terms**: Hidden fees, confusing contracts, unclear policies
+                - **High Interest Rates**: Unexpected rate increases, unclear rate structures
+                - **Fees**: Overdraft fees, maintenance fees, transaction fees
+                
+                *Note: This is a demo response. To see real data analysis, ensure the RAG pipeline and vector store are properly configured.*
+                """
+            elif any(word in prompt_lower for word in ['product', 'credit card', 'loan', 'mortgage']):
+                response = """
+                **Product-Specific Information:**
+                
+                Common products include:
+                - Credit Cards: Often have issues with billing, fees, and credit limit changes
+                - Personal Loans: Issues with terms, interest rates, and approval processes
+                - Mortgages: Problems with payment changes, escrow accounts, and communication
+                - Checking/Savings Accounts: Issues with fees, overdraft protection, and account management
+                
+                *Note: This is a demo response. Add your data and configure the RAG pipeline for detailed product analysis.*
+                """
+            else:
+                response = """
+                **AI Complaint Analyst - Demo Mode**
+                
+                I'm currently running in demo mode because some dependencies are not available. 
+                To enable full functionality:
+                1. Ensure all required packages are installed (faiss, sentence-transformers, etc.)
+                2. Add your complaint data to the data/ folder
+                3. Generate the vector store using the embedding pipeline
+                
+                *I can still help answer questions, but responses will be general rather than data-specific.*
+                """
+            
             return {
-                "response": "This is a demo response. The full RAG pipeline is not available in this environment.",
+                "response": response,
                 "sources": [],
             }
 
